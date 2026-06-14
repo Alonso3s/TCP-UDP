@@ -133,7 +133,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     args = parser.parse_args(argv)
-    messages = args.messages or list(DEFAULT_MESSAGES)
+    messages = getattr(args, "messages", None) or list(DEFAULT_MESSAGES)
 
     if args.command == "tcp-server":
         total = run_tcp_echo_server(

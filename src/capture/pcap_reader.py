@@ -16,6 +16,11 @@ IPV4_MIN_HEADER_LEN = 20
 PROTO_TCP = 6
 PROTO_UDP = 17
 
+# Tipos de enlace en el encabezado global del .pcap
+_DLT_EN10MB = 1   # Ethernet estándar
+_DLT_NULL = 0     # NULL/Loopback (Windows Npcap / BSD loopback)
+_AF_INET = 2      # Familia IPv4 en cabecera DLT_NULL (little-endian en Windows)
+
 
 @dataclass(frozen=True)
 class IPv4Packet:
@@ -35,6 +40,20 @@ class TransportPacket:
     protocol: str
     header: TCPHeader | UDPHeader
     payload_length: int
+
+
+def parse_null_loopback_frame(frame_bytes: bytes) -> IPv4Packet:
+    """Extrae un paquete IPv4 desde una trama DLT_NULL (loopback de Windows/BSD).
+
+    La trama empieza con 4 bytes que indican la familia de direcciones
+    en little-endian (AF_INET=2). Solo se procesan tramas IPv4.
+    """
+    if len(frame_bytes) < 4:
+        raise ValueError("Trama DLT_NULL demasiado corta")
+    family = struct.unpack("<I", frame_bytes[:4])[0]
+    if family != _AF_INET:
+        raise ValueError(f"Familia de red no soportada en DLT_NULL: {family}")
+    return parse_ipv4_packet(frame_bytes[4:])
 
 
 def parse_ethernet_ipv4_frame(frame_bytes: bytes) -> IPv4Packet:
@@ -101,14 +120,25 @@ def iter_pcap_transport_headers(
     *,
     strict: bool = False,
 ) -> Iterator[TransportPacket]:
-    """Itera cabeceras TCP/UDP de un pcap usando bytes crudos como entrada."""
+    """Itera cabeceras TCP/UDP de un pcap usando bytes crudos como entrada.
+
+    Soporta DLT_EN10MB (Ethernet estándar) y DLT_NULL (loopback Windows/BSD).
+    """
     from scapy.utils import RawPcapReader
 
-    for packet_bytes, metadata in RawPcapReader(str(pcap_path)):
+    reader = RawPcapReader(str(pcap_path))
+    linktype = reader.linktype
+
+    if linktype == _DLT_NULL:
+        _parse_frame = parse_null_loopback_frame
+    else:
+        _parse_frame = parse_ethernet_ipv4_frame
+
+    for packet_bytes, metadata in reader:
         timestamp = _metadata_timestamp(metadata)
 
         try:
-            ipv4 = parse_ethernet_ipv4_frame(bytes(packet_bytes))
+            ipv4 = _parse_frame(bytes(packet_bytes))
             transport = _parse_transport_packet(ipv4, timestamp)
         except ValueError:
             if strict:

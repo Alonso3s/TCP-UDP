@@ -9,13 +9,13 @@ Avance global estimado: **22%**.
 
 ## Fase 1 - Base
 
-Avance estimado: **45-55%**.
+Avance estimado: **65-70%**.
 
 | Tarea | Estado |
 |---|---|
 | Crear repo Git público e invitar integrantes | Cumplido |
 | `README.md`, `requirements.txt` y estructura inicial | Cumplido parcialmente |
-| Montar red controlada | Pendiente |
+| Montar red controlada | Cumplido (loopback local, ver `docs/network_setup.md`) |
 | Generador de tráfico TCP | Cumplido |
 | Generador de tráfico UDP | Cumplido |
 | Escáner de puertos propio o nmap documentado | Pendiente |
@@ -65,10 +65,12 @@ Avance estimado: **0%**.
 - Generador de tráfico TCP con sockets.
 - Generador de tráfico UDP con sockets.
 - README inicial con instalación, pruebas, captura y generación de tráfico.
+- Red controlada documentada (loopback local, topología, procedimiento reproducible) en `docs/network_setup.md`.
+- Carpeta `captures/` creada con instrucciones de contenido.
 
 ## Pendiente principal
 
-- Montar y documentar la red controlada.
+- ~~Montar y documentar la red controlada.~~ ✅
 - Generar capturas reales reproducibles en `captures/`.
 - Implementar escáner de puertos propio o documentar uso de nmap.
 - Implementar reconstructor de estados TCP.
