@@ -9,7 +9,8 @@
 - **Anomalía a analizar:** Escaneo de puertos (extensión opcional: inundación SYN)
 - **Stack:** Python 3 + scapy + sockets · validación con Wireshark / tshark
 - **Entrega de la demo (E3):** martes 23 de junio
-- **Integrantes:** [Integrante 1] · [Integrante 2] · [Integrante 3]
+- **Integrantes:** Darnell Alonso Estrada Quesada
+                   Rick Daniel Rodriguez  
 - **Repositorio:** [URL del repo Git público]
 
 ---
