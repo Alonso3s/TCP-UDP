@@ -150,6 +150,32 @@ for pkt in iter_pcap_transport_headers('captures/sesion_tcp_udp.pcap'):
 
 ---
 
+## Escaneo de puertos propio
+
+El proyecto incluye un escáner TCP connect propio basado en sockets. Este escáner genera intentos
+de conexión TCP contra un rango de puertos de la red controlada, suficiente para producir tráfico
+de escaneo reproducible sin tocar infraestructura externa.
+
+```powershell
+python -m src.generator.port_scanner --host 127.0.0.1 --ports 5000-5100 --timeout 0.5
+```
+
+Para generar una captura específica del escaneo:
+
+```powershell
+python -m src.capture.sniffer captures\escaneo_tcp_connect.pcap ^
+    --iface "\Device\NPF_Loopback" --count 500 --timeout 60
+python -m src.generator.port_scanner --host 127.0.0.1 --ports 5000-5100
+```
+
+Opcionalmente, si el entorno tiene `nmap`, se puede comparar contra:
+
+```powershell
+nmap 127.0.0.1 -sT -p 5000-5100
+```
+
+---
+
 ## Metodología de captura
 
 1. El sniffer se inicia **antes** que cualquier otro proceso para no perder paquetes.

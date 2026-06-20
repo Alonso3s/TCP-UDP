@@ -30,12 +30,14 @@ El sistema debe cumplir **tres componentes mínimos**. Esto es lo único que se 
 demás es accesorio.
 
 ### Componente 1 — Captura de tráfico real
+
 - Montar una red controlada propia (VMs en red aislada y/o topología en **GNS3**).
 - Generar tráfico representativo: sesiones TCP completas, datagramas UDP y los escaneos.
 - Capturar con scapy/tcpdump y guardar archivos `.pcap` reproducibles.
 - Documentar la metodología de captura.
 
 ### Componente 2 — Implementación a bajo nivel (el corazón del proyecto)
+
 - **Parser propio** que decodifica las cabeceras **TCP (20 bytes + opciones)** y **UDP (8 bytes)**
   a partir de los **bytes crudos** (módulo `struct`). No usar el disector automático de scapy
   para interpretar los campos.
@@ -45,6 +47,7 @@ demás es accesorio.
   sobre el mismo `.pcap`.
 
 ### Componente 3 — Análisis de la anomalía
+
 - Reproducir escaneos de puertos en **nuestra propia red** (nmap y/o escáner propio en scapy).
 - Detectar el escaneo con heurísticas (muchos puertos en ventana corta, proporción RST/SYN-ACK,
   conexiones semiabiertas).
@@ -76,7 +79,6 @@ demás es accesorio.
 
 ## 4. Estructura del repositorio
 
-```
 g5-transporte/
 ├── README.md                 # instalación, uso y cómo reproducir
 ├── requirements.txt          # dependencias explícitas
@@ -94,7 +96,6 @@ g5-transporte/
 ├── tests/                    # pruebas unitarias del parser y el detector
 ├── scripts/                  # guion de pruebas reproducible (un comando)
 └── results/                  # métricas y gráficos generados
-```
 
 **Convención de ramas:** una rama por componente (`feat/parser`, `feat/detector`,
 `feat/capture`…), integración temprana a `main`. Nadie trabaja directo sobre `main`.
@@ -145,22 +146,25 @@ Un componente está listo solo cuando cumple esto:
 ## 8. Tareas (checklist)
 
 ### Fase 1 — Base
-- [ ] Crear el repositorio Git público e invitar a los integrantes
-- [ ] `README.md`, `requirements.txt` y estructura de carpetas inicial
-- [ ] Montar la red controlada (VMs aisladas o topología GNS3)
-- [ ] Generador de tráfico TCP (cliente/servidor con sockets)
-- [ ] Generador de tráfico UDP
-- [ ] Escáner de puertos propio (scapy) y/o uso de nmap documentado
+
+- [x] Crear el repositorio Git público e invitar a los integrantes
+- [x] `README.md`, `requirements.txt` y estructura de carpetas inicial
+- [x] Montar la red controlada (VMs aisladas o topología GNS3)
+- [x] Generador de tráfico TCP (cliente/servidor con sockets)
+- [x] Generador de tráfico UDP
+- [x] Escáner de puertos propio (sockets TCP connect) y/o uso de nmap documentado
 
 ### Fase 2 — Núcleo
-- [ ] Sniffer que guarda `.pcap`
-- [ ] Parser de cabecera **UDP** (8 bytes) desde bytes crudos
-- [ ] Parser de cabecera **TCP** (puertos, seq, ack, offset, flags, ventana, checksum, opciones)
-- [ ] Reconstructor de estados TCP (handshake, ventana, retransmisión, cierre)
+
+- [x] Sniffer que guarda `.pcap`
+- [x] Parser de cabecera **UDP** (8 bytes) desde bytes crudos
+- [x] Parser de cabecera **TCP** (puertos, seq, ack, offset, flags, ventana, checksum, opciones)
+- [x] Reconstructor de estados TCP (handshake, ventana, retransmisión, cierre)
 - [ ] Validación campo a campo contra `tshark`/`pyshark`
-- [ ] Pruebas unitarias del parser
+- [x] Pruebas unitarias del parser
 
 ### Fase 3 — Detección
+
 - [ ] Detector de escaneo (heurísticas + umbrales parametrizables)
 - [ ] Cálculo de métricas (precisión, recall, F1, FP/hora, latencia, cobertura)
 - [ ] Gráficos de resultados
@@ -169,10 +173,12 @@ Un componente está listo solo cuando cumple esto:
 - [ ] README final con instalación, uso y reproducción
 
 ### Fase 4 — Cierre
+
 - [ ] Póster A1 (motivación, marco teórico, arquitectura, metodología, resultados, conclusión, referencias)
 - [ ] Ensayo de la demo en vivo (cronometrado: 15 teoría / 10 demo / 5 preguntas)
 
 ### Extensión (solo si sobra tiempo)
+
 - [ ] Detección de inundación SYN (RFC 4987)
 - [ ] Escaneo UDP y escaneos FIN/NULL/Xmas
 
@@ -201,6 +207,7 @@ puntero urgente · opciones.
 **Cabecera UDP** (8 bytes): puerto origen · puerto destino · longitud · checksum.
 
 **Comportamiento de los escaneos:**
+
 - *SYN scan (half-open):* puerto abierto → `SYN-ACK`; cerrado → `RST`; no completa el handshake.
 - *Connect scan:* completa el handshake de tres vías.
 - *FIN/NULL/Xmas:* puerto cerrado → `RST`; abierto → descarta el segmento.
