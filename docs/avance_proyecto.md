@@ -3,9 +3,10 @@
 ## Estado general
 
 Segun el checklist de `PROYECTO_Grupo5_Transporte.md`, el proyecto ya cerro la base funcional
-de la **Fase 1** y avanzo en la **Fase 2 - Nucleo**.
+de la **Fase 1**, completo la implementacion principal de la **Fase 2 - Nucleo** y dejo lista
+la implementacion base de la **Fase 3 - Deteccion**.
 
-Avance global estimado: **42-48%**.
+Avance global estimado: **70-78%**.
 
 ## Fase 1 - Base
 
@@ -24,7 +25,7 @@ Pendiente menor de Fase 1: generar y versionar capturas reales definitivas en `c
 
 ## Fase 2 - Nucleo
 
-Avance estimado: **55-65%**.
+Avance estimado: **85-90%**.
 
 | Tarea | Estado |
 |---|---|
@@ -32,7 +33,7 @@ Avance estimado: **55-65%**.
 | Parser UDP desde bytes crudos | Cumplido |
 | Parser TCP desde bytes crudos | Cumplido |
 | Reconstructor de estados TCP | Cumplido inicial |
-| Validacion contra `tshark`/`pyshark` | Pendiente |
+| Validacion contra `tshark`/`pyshark` | Cumplido a nivel de modulo/CLI; falta correrlo con capturas definitivas |
 | Pruebas unitarias del parser | Cumplido |
 
 El reconstructor actual identifica eventos observables desde capturas: inicio y final del
@@ -40,16 +41,16 @@ handshake, cambios de ventana, retransmisiones basicas, FIN y RST.
 
 ## Fase 3 - Deteccion
 
-Avance estimado: **5-10%**.
+Avance estimado: **70-80%**.
 
 | Tarea | Estado |
 |---|---|
-| Detector de escaneo | Pendiente |
-| Metricas: precision, recall, F1, FP/hora, latencia y cobertura | Pendiente |
-| Graficos de resultados | Pendiente |
-| `.pcap` de muestra definitivos | Pendiente |
-| Guion reproducible en `scripts/` | Parcial: existe `scripts/demo.py`, falta integrar escaneo/detector/metricas |
-| README final | Parcial |
+| Detector de escaneo | Cumplido inicial |
+| Metricas: precision, recall, F1, FP/hora, latencia y cobertura | Cumplido inicial |
+| Graficos de resultados | Cumplido inicial: SVG generado por `scripts/analyze_pcap.py` |
+| `.pcap` de muestra definitivos | Pendiente operativo |
+| Guion reproducible en `scripts/` | Cumplido inicial: `scripts/analyze_pcap.py` |
+| README final | Cumplido inicial |
 
 ## Fase 4 - Cierre
 
@@ -71,6 +72,10 @@ Avance estimado: **0%**.
 - Generador de trafico UDP con sockets.
 - Escaner TCP connect propio con sockets.
 - Reconstructor inicial de estados TCP.
+- Validador contra `tshark` para comparar campos TCP/UDP.
+- Detector de escaneo de puertos por diversidad de puertos destino en ventana temporal.
+- Calculo de metricas: precision, recall, F1, falsos positivos por hora, latencia y cobertura.
+- Generacion de reportes `json`, `csv` y grafico `svg` en `results/`.
 - README actualizado con uso de captura, generadores, escaner y reconstructor.
 - Red controlada documentada en `docs/network_setup.md`.
 - Pruebas automatizadas: parser, lector pcap, generador, escaner y reconstructor.
@@ -80,15 +85,13 @@ Avance estimado: **0%**.
 1. Generar capturas reales reproducibles en `captures/`:
    - `sesion_tcp_udp.pcap`
    - `escaneo_tcp_connect.pcap`
-2. Implementar validacion campo a campo contra `tshark` o `pyshark`.
-3. Implementar detector de escaneo de puertos sobre los paquetes parseados.
-4. Calcular metricas de deteccion: precision, recall, F1, FP/hora, latencia y cobertura.
-5. Generar salidas en `results/`, incluyendo tablas y graficos.
-6. Integrar escaneo, detector y metricas en `scripts/demo.py` o en un nuevo guion reproducible.
-7. Completar poster A1 y ensayo de demo.
+2. Correr `python -m src.validation.tshark_compare captures\sesion_tcp_udp.pcap` con `tshark` instalado.
+3. Correr `python scripts/analyze_pcap.py captures\escaneo_tcp_connect.pcap --output-dir results`.
+4. Crear `results/truth_labels.json` con la verdad de referencia del escaneo real y recalcular metricas.
+5. Completar poster A1 y ensayo de demo.
 
 ## Siguiente paso recomendado
 
-El siguiente paso en orden natural es implementar la **validacion contra tshark**, porque permite
-defender la correctitud del parser de bajo nivel. Despues conviene implementar el **detector de
-escaneo**, aprovechando el escaner propio y las capturas `escaneo_tcp_connect.pcap`.
+El siguiente paso en orden natural ya no es programar mas nucleo, sino producir evidencia:
+capturas definitivas, salida de validacion contra `tshark`, archivos en `results/` y graficos para
+el poster/demo.

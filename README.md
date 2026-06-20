@@ -15,8 +15,10 @@ Sistema en Python para capturar, parsear y analizar trafico TCP/UDP en una red c
 - Generador TCP/UDP con sockets para producir trafico normal reproducible.
 - Escaner TCP connect propio para generar trafico de escaneo controlado.
 - Reconstructor inicial de estados TCP: handshake, ventana, retransmision y cierre.
+- Validacion campo a campo contra `tshark` para capturas `.pcap`.
+- Detector de escaneo de puertos con metricas y reportes en `results/`.
 - Red controlada local documentada en `docs/network_setup.md`.
-- Pruebas unitarias iniciales del parser, generador, lector, escaner y reconstructor.
+- Pruebas unitarias del parser, generador, lector, escaner, reconstructor, validador y detector.
 
 ## Instalacion
 
@@ -123,6 +125,53 @@ flows = reconstruct_tcp_flows(iter_pcap_transport_headers('captures/demo_captura
 for flow in flows.values():
     print(flow.key, flow.handshake_completed, flow.closed, flow.retransmissions, flow.window_updates)
 "
+```
+
+## Validar parser contra tshark
+
+Requiere tener `tshark` instalado y disponible en el `PATH`.
+
+```powershell
+python -m src.validation.tshark_compare captures\sesion_tcp_udp.pcap
+```
+
+El validador compara campos TCP/UDP extraidos por el parser propio contra los campos reportados
+por `tshark`: IP origen/destino, protocolo, puertos, secuencia, ACK, longitud de cabecera, flags,
+ventana, longitud UDP y checksums.
+
+## Detectar escaneos y generar resultados
+
+```powershell
+python scripts/analyze_pcap.py captures\escaneo_tcp_connect.pcap ^
+    --output-dir results --window 5 --min-ports 10
+```
+
+El script genera:
+
+- `results/detections.json`
+- `results/detections.csv`
+- `results/detections_by_source.svg`
+
+Si se cuenta con verdad de referencia, se puede calcular precision, recall, F1, FP/hora,
+latencia y cobertura usando un JSON como este:
+
+```json
+{
+  "labels": [
+    {
+      "source_ip": "127.0.0.1",
+      "target_ip": "127.0.0.1",
+      "protocol": "TCP",
+      "start_time": 0.0,
+      "end_time": 60.0
+    }
+  ]
+}
+```
+
+```powershell
+python scripts/analyze_pcap.py captures\escaneo_tcp_connect.pcap ^
+    --truth results\truth_labels.json
 ```
 
 ## Demo en un comando

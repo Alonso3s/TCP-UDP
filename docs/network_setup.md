@@ -174,6 +174,19 @@ Opcionalmente, si el entorno tiene `nmap`, se puede comparar contra:
 nmap 127.0.0.1 -sT -p 5000-5100
 ```
 
+Analizar la captura y generar resultados:
+
+```powershell
+python scripts/analyze_pcap.py captures\escaneo_tcp_connect.pcap ^
+    --output-dir results --window 5 --min-ports 10
+```
+
+Validar una captura normal TCP/UDP contra `tshark`:
+
+```powershell
+python -m src.validation.tshark_compare captures\sesion_tcp_udp.pcap
+```
+
 ---
 
 ## Metodología de captura

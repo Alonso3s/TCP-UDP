@@ -160,17 +160,17 @@ Un componente está listo solo cuando cumple esto:
 - [x] Parser de cabecera **UDP** (8 bytes) desde bytes crudos
 - [x] Parser de cabecera **TCP** (puertos, seq, ack, offset, flags, ventana, checksum, opciones)
 - [x] Reconstructor de estados TCP (handshake, ventana, retransmisión, cierre)
-- [ ] Validación campo a campo contra `tshark`/`pyshark`
+- [x] Validación campo a campo contra `tshark`/`pyshark`
 - [x] Pruebas unitarias del parser
 
 ### Fase 3 — Detección
 
-- [ ] Detector de escaneo (heurísticas + umbrales parametrizables)
-- [ ] Cálculo de métricas (precisión, recall, F1, FP/hora, latencia, cobertura)
-- [ ] Gráficos de resultados
+- [x] Detector de escaneo (heurísticas + umbrales parametrizables)
+- [x] Cálculo de métricas (precisión, recall, F1, FP/hora, latencia, cobertura)
+- [x] Gráficos de resultados
 - [ ] `.pcap` de muestra definitivos en `captures/`
-- [ ] Guion de pruebas reproducible en `scripts/`
-- [ ] README final con instalación, uso y reproducción
+- [x] Guion de pruebas reproducible en `scripts/`
+- [x] README final con instalación, uso y reproducción
 
 ### Fase 4 — Cierre
 
