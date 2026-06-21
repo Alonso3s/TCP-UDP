@@ -1,2 +1,1 @@
 source_ip,target_ip,protocol,start_time,end_time,distinct_ports,packet_count,ports,reason
-127.0.0.1,127.0.0.1,TCP,1782002082.324981,1782002082.326601,10,10,6000 6001 6002 6003 6004 6005 6006 6007 6008 6009,10 puertos destino distintos en 5.0 segundos
