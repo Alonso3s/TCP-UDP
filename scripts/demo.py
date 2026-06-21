@@ -3,7 +3,7 @@
 Demo del sistema — Grupo 5 Capa de Transporte
 IF5000 — Redes y Comunicación de Datos, UCR Sede del Sur
 
-Uso (desde la raíz del proyecto con el entorno virtual activo):
+Uso (desde la raíz del proyecto, en una terminal con permisos de administrador):
 
     python scripts/demo.py
 
@@ -12,6 +12,7 @@ Requisitos en Windows: Npcap instalado + ejecutar como administrador.
 from __future__ import annotations
 
 import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -24,15 +25,26 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))   # permite "import src.*" desde scripts/
 
+from src.capture import iter_pcap_transport_headers  # noqa: E402
+from src.detector import detect_port_scans  # noqa: E402
+from src.states import reconstruct_tcp_flows  # noqa: E402
+from src.validation import validate_pcap_with_tshark  # noqa: E402
+
 CAPTURES = ROOT / "captures"
 CAPTURES.mkdir(exist_ok=True)
 
 PYTHON = sys.executable
-PCAP_FILE = CAPTURES / "demo_captura.pcap"
+SESSION_PCAP = CAPTURES / "sesion_tcp_udp.pcap"
+SCAN_PCAP = CAPTURES / "escaneo_tcp_connect.pcap"
 
 TCP_PORT = 5000
 UDP_PORT = 5001
-SNIFFER_TIMEOUT = 15   # segundos; los generadores terminan antes
+SCAN_PORTS = "6000-6050"
+SESSION_SNIFFER_TIMEOUT = 12   # segundos; TCP+UDP terminan antes
+SCAN_SNIFFER_TIMEOUT = 10      # segundos; el escaneo termina antes
+
+# Wireshark no siempre agrega tshark.exe al PATH en Windows.
+TSHARK_CANDIDATES = ("tshark", r"C:\Program Files\Wireshark\tshark.exe")
 
 
 def _detect_loopback() -> str:
@@ -50,6 +62,14 @@ def _detect_loopback() -> str:
     return r"\Device\NPF_Loopback"
 
 
+def _find_tshark() -> str | None:
+    for candidate in TSHARK_CANDIDATES:
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return None
+
+
 def _section(step: str, title: str) -> None:
     print(f"\n{'─' * 62}")
     print(f"  {step}  {title}")
@@ -64,6 +84,31 @@ def _popen(*args: str) -> subprocess.Popen:
     return subprocess.Popen([PYTHON, *args], cwd=ROOT)
 
 
+def _start_sniffer(pcap_path: Path, timeout: int, iface: str) -> subprocess.Popen:
+    sniffer = _popen(
+        "-m", "src.capture.sniffer",
+        str(pcap_path),
+        "--iface", iface,
+        "--count", "500",
+        "--timeout", str(timeout),
+        "--filter", "(tcp or udp) and host 127.0.0.1",
+    )
+    time.sleep(2)  # dar tiempo al sniffer para abrir la interfaz
+    if sniffer.poll() is not None:
+        print("\n  [ERROR] El sniffer terminó de inmediato.")
+        print("  Verifique que Npcap esté instalado y que corre como administrador.")
+        sys.exit(1)
+    return sniffer
+
+
+def _wait_sniffer(sniffer: subprocess.Popen, timeout: int) -> None:
+    try:
+        sniffer.wait(timeout=timeout + 5)
+    except subprocess.TimeoutExpired:
+        sniffer.kill()
+        sniffer.wait()
+
+
 def main() -> None:
     iface = _detect_loopback()
 
@@ -72,91 +117,133 @@ def main() -> None:
     print("  Integrantes: Darnell Estrada · Rick Rodriguez · Jorge Murillo")
     print("=" * 62)
 
-    # ── 1. Sniffer ──────────────────────────────────────────────
-    _section("[1/4]", "Iniciando sniffer en interfaz loopback")
+    # ── PARTE 1: sesión TCP/UDP normal ──────────────────────────────
+    _section("[1/8]", "Iniciando sniffer — sesión TCP/UDP")
     print(f"  Interfaz : {iface}")
-    print(f"  Salida   : captures/demo_captura.pcap")
-    sniffer = _popen(
-        "-m", "src.capture.sniffer",
-        str(PCAP_FILE),
-        "--iface", iface,
-        "--count", "500",
-        "--timeout", str(SNIFFER_TIMEOUT),
-        "--filter", "tcp or udp",
-    )
-    time.sleep(2)  # dar tiempo al sniffer para abrir la interfaz
-    if sniffer.poll() is not None:
-        print("\n  [ERROR] El sniffer terminó de inmediato.")
-        print("  Verifique que Npcap esté instalado y que corre como administrador.")
-        sys.exit(1)
-    print(f"  Sniffer activo (PID {sniffer.pid}).")
+    print(f"  Salida   : captures/{SESSION_PCAP.name}")
+    session_sniffer = _start_sniffer(SESSION_PCAP, SESSION_SNIFFER_TIMEOUT, iface)
+    print(f"  Sniffer activo (PID {session_sniffer.pid}).")
 
-    # ── 2. Sesión TCP ────────────────────────────────────────────
-    _section("[2/4]", f"Sesión TCP completa  →  127.0.0.1:{TCP_PORT}")
+    _section("[2/8]", f"Sesión TCP completa  →  127.0.0.1:{TCP_PORT}")
     tcp_server = _popen(
         "-m", "src.generator.traffic",
-        "tcp-server",
-        "--host", "127.0.0.1",
-        "--port", str(TCP_PORT),
-        "--count", "1",
+        "tcp-server", "--host", "127.0.0.1", "--port", str(TCP_PORT), "--count", "1",
     )
     time.sleep(1.5)
     _run(
         "-m", "src.generator.traffic",
-        "tcp-client",
-        "--host", "127.0.0.1",
-        "--port", str(TCP_PORT),
+        "tcp-client", "--host", "127.0.0.1", "--port", str(TCP_PORT),
         "hola tcp", "grupo 5", "IF5000 UCR",
     )
     tcp_server.wait(timeout=5)
     print("  Completada (SYN → SYN-ACK → ACK → datos → FIN-ACK).")
 
-    # ── 3. Datagramas UDP ────────────────────────────────────────
-    _section("[3/4]", f"Datagramas UDP  →  127.0.0.1:{UDP_PORT}")
+    _section("[3/8]", f"Datagramas UDP  →  127.0.0.1:{UDP_PORT}")
     udp_server = _popen(
         "-m", "src.generator.traffic",
-        "udp-server",
-        "--host", "127.0.0.1",
-        "--port", str(UDP_PORT),
-        "--count", "3",
+        "udp-server", "--host", "127.0.0.1", "--port", str(UDP_PORT), "--count", "3",
     )
     time.sleep(1.5)
     _run(
         "-m", "src.generator.traffic",
-        "udp-client",
-        "--host", "127.0.0.1",
-        "--port", str(UDP_PORT),
+        "udp-client", "--host", "127.0.0.1", "--port", str(UDP_PORT),
         "hola udp", "grupo 5", "IF5000 UCR",
     )
     udp_server.wait(timeout=5)
     print("  3 datagramas enviados y recibidos.")
 
-    # ── 4. Esperar sniffer y parsear ─────────────────────────────
-    _section("[4/4]", "Analizando captura")
-    remaining = SNIFFER_TIMEOUT - 7  # ~7 s consumidos por generadores + sleeps
-    print(f"  Esperando fin del sniffer ({max(remaining, 1)} s)...")
-    try:
-        sniffer.wait(timeout=SNIFFER_TIMEOUT + 5)
-    except subprocess.TimeoutExpired:
-        sniffer.kill()
-        sniffer.wait()
-
-    if not PCAP_FILE.exists():
-        print(f"\n  [ERROR] No se generó {PCAP_FILE.name}")
+    _section("[4/8]", "Analizando sesión: parser + reconstructor de estados")
+    _wait_sniffer(session_sniffer, SESSION_SNIFFER_TIMEOUT)
+    if not SESSION_PCAP.exists():
+        print(f"\n  [ERROR] No se generó {SESSION_PCAP.name}")
         print("  El sniffer necesita Npcap y permisos de administrador.")
         sys.exit(1)
 
-    from src.capture.pcap_reader import iter_pcap_transport_headers  # noqa: PLC0415
+    session_packets = list(iter_pcap_transport_headers(SESSION_PCAP))
+    tcp_pkts = [p for p in session_packets if p.protocol == "TCP"]
+    udp_pkts = [p for p in session_packets if p.protocol == "UDP"]
+    print(f"  Paquetes capturados : {len(session_packets)}  (TCP {len(tcp_pkts)}, UDP {len(udp_pkts)})")
 
-    packets = list(iter_pcap_transport_headers(PCAP_FILE))
-    tcp_pkts = [p for p in packets if p.protocol == "TCP"]
-    udp_pkts = [p for p in packets if p.protocol == "UDP"]
+    _print_packet_table(session_packets)
 
-    print(f"\n  Paquetes capturados : {len(packets)}")
-    print(f"    TCP               : {len(tcp_pkts)}")
-    print(f"    UDP               : {len(udp_pkts)}")
+    flows = reconstruct_tcp_flows(session_packets)
+    print("\n  Reconstrucción de estados TCP:")
+    for key, flow in flows.items():
+        print(f"    Flujo {key[0]} <-> {key[1]}")
+        print(
+            f"      handshake completo={flow.handshake_completed}  cerrado={flow.closed}  "
+            f"retransmisiones={flow.retransmissions}  cambios de ventana={flow.window_updates}"
+        )
+        for event in flow.events:
+            ts = f"{event.timestamp:.2f}s" if event.timestamp is not None else "?"
+            print(f"        [{ts}] {event.event_type}: {event.detail}")
 
-    # Tabla de cabeceras
+    _section("[5/8]", "Validando parser propio contra tshark")
+    tshark_path = _find_tshark()
+    if tshark_path is None:
+        print("  [OMITIDO] No se encontró tshark instalado ni en el PATH.")
+    else:
+        try:
+            summary = validate_pcap_with_tshark(SESSION_PCAP, tshark_path=tshark_path)
+            print(f"  Paquetes comparados : {summary.compared_packets}")
+            print(f"  Campos comparados   : {summary.compared_fields}")
+            print(f"  Coincidencia        : {summary.match_ratio:.2%}")
+            if summary.unmatched_own_packets or summary.unmatched_tshark_rows:
+                print(
+                    f"  Sin pareja          : {summary.unmatched_own_packets} del parser propio, "
+                    f"{summary.unmatched_tshark_rows} de tshark (p. ej. IPv6, no soportado)"
+                )
+            if summary.mismatches:
+                print("  Diferencias:")
+                for mismatch in summary.mismatches[:10]:
+                    print(
+                        f"    pkt={mismatch.packet_index} field={mismatch.field} "
+                        f"propio={mismatch.own_value} tshark={mismatch.tshark_value}"
+                    )
+        except Exception as exc:  # noqa: BLE001 - reporte best-effort en la demo
+            print(f"  [ERROR] {exc}")
+
+    # ── PARTE 2: escaneo de puertos ──────────────────────────────────
+    _section("[6/8]", "Iniciando sniffer — escaneo de puertos")
+    print(f"  Salida   : captures/{SCAN_PCAP.name}")
+    scan_sniffer = _start_sniffer(SCAN_PCAP, SCAN_SNIFFER_TIMEOUT, iface)
+    print(f"  Sniffer activo (PID {scan_sniffer.pid}).")
+
+    _section("[7/8]", f"Escaneo TCP connect propio  →  127.0.0.1:{SCAN_PORTS}")
+    _run("-m", "src.generator.port_scanner", "--host", "127.0.0.1", "--ports", SCAN_PORTS)
+
+    _section("[8/8]", "Analizando escaneo: detector de anomalías")
+    _wait_sniffer(scan_sniffer, SCAN_SNIFFER_TIMEOUT)
+    if not SCAN_PCAP.exists():
+        print(f"\n  [ERROR] No se generó {SCAN_PCAP.name}")
+        sys.exit(1)
+
+    scan_packets = list(iter_pcap_transport_headers(SCAN_PCAP))
+    print(f"  Paquetes capturados : {len(scan_packets)}")
+
+    detections = detect_port_scans(scan_packets)
+    if detections:
+        for detection in detections:
+            print(
+                f"    [ALERTA] {detection.protocol} {detection.source_ip} -> "
+                f"{detection.target_ip}: {detection.distinct_ports} puertos "
+                f"({detection.reason})"
+            )
+    else:
+        print("    No se detectaron escaneos (revisar umbrales/min_distinct_ports).")
+
+    # ── Resumen final ──────────────────────────────────────────────
+    print("\n" + "=" * 62)
+    print("  RESUMEN")
+    print(f"    Sesión TCP/UDP : {SESSION_PCAP.name}  ({len(session_packets)} paquetes)")
+    print(
+        f"    Escaneo        : {SCAN_PCAP.name}  "
+        f"({len(scan_packets)} paquetes, {len(detections)} detección(es))"
+    )
+    print("=" * 62 + "\n")
+
+
+def _print_packet_table(packets) -> None:
     print()
     col = f"  {'Proto':<5}  {'Origen IP:Puerto':<25}  {'Destino IP:Puerto':<25}  Flags / Info"
     print(col)
@@ -172,19 +259,7 @@ def main() -> None:
             info = f"len={hdr.length}"
         print(f"  {pkt.protocol:<5}  {src:<25}  {dst:<25}  {info}")
     if len(packets) > 25:
-        print(f"  ... y {len(packets) - 25} paquetes más (ver {PCAP_FILE.name})")
-
-    # Resumen final
-    print("\n" + "=" * 62)
-    print("  RESUMEN")
-    print(f"    Captura  : {PCAP_FILE.name}")
-    print(f"    Paquetes : {len(packets)}  (TCP {len(tcp_pkts)}, UDP {len(udp_pkts)})")
-    print()
-    print("  PRÓXIMAS FASES:")
-    print("    [ ] src/states/     — estados TCP (handshake, ventana, retransmisión)")
-    print("    [ ] src/detector/   — detección de port scan + métricas")
-    print("    [ ] src/validation/ — comparación campo a campo vs tshark")
-    print("=" * 62 + "\n")
+        print(f"  ... y {len(packets) - 25} paquetes más")
 
 
 if __name__ == "__main__":

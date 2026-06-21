@@ -1,0 +1,12 @@
+VALIDACION DEL PARSER PROPIO CONTRA TSHARK
+============================================================
+
+Captura: sesion_tcp_udp.pcap
+  Paquetes comparados : 36
+  Campos comparados   : 372
+  Coincidencia        : 100.00%
+
+Captura: escaneo_tcp_connect.pcap
+  Paquetes comparados : 500
+  Campos comparados   : 5500
+  Coincidencia        : 100.00%

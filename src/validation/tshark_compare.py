@@ -28,6 +28,8 @@ TSHARK_FIELDS = (
     "udp.dstport",
     "udp.length",
     "udp.checksum",
+    # Al final para no romper el orden de columnas de capturas/pruebas previas.
+    "frame.number",
 )
 
 
@@ -37,6 +39,7 @@ class TsharkRow:
     destination_ip: str
     protocol: str
     fields: dict[str, str]
+    frame_number: int | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,8 @@ class ValidationSummary:
     compared_packets: int
     compared_fields: int
     mismatches: tuple[FieldMismatch, ...]
+    unmatched_own_packets: int = 0
+    unmatched_tshark_rows: int = 0
 
     @property
     def matched_fields(self) -> int:
@@ -122,12 +127,14 @@ def parse_tshark_csv(lines: Iterable[str]) -> list[TsharkRow]:
         padded = raw_row + [""] * (len(TSHARK_FIELDS) - len(raw_row))
         fields = dict(zip(TSHARK_FIELDS, padded, strict=False))
         protocol = "TCP" if fields["tcp.srcport"] else "UDP"
+        frame_number_text = fields.get("frame.number", "")
         rows.append(
             TsharkRow(
                 source_ip=fields["ip.src"],
                 destination_ip=fields["ip.dst"],
                 protocol=protocol,
                 fields=fields,
+                frame_number=int(frame_number_text) if frame_number_text else None,
             )
         )
 
@@ -138,13 +145,11 @@ def compare_packets_to_tshark_rows(
     packets: Sequence[TransportPacket],
     rows: Sequence[TsharkRow],
 ) -> ValidationSummary:
-    compared_packets = min(len(packets), len(rows))
+    pairs, unmatched_own, unmatched_tshark = _pair_packets_with_rows(packets, rows)
     mismatches: list[FieldMismatch] = []
     compared_fields = 0
 
-    for index in range(compared_packets):
-        packet = packets[index]
-        row = rows[index]
+    for index, (packet, row) in enumerate(pairs):
         own_fields = _packet_fields(packet)
         tshark_fields = _row_fields(row)
 
@@ -161,21 +166,50 @@ def compare_packets_to_tshark_rows(
                     )
                 )
 
-    if len(packets) != len(rows):
-        mismatches.append(
-            FieldMismatch(
-                packet_index=compared_packets,
-                field="packet_count",
-                own_value=str(len(packets)),
-                tshark_value=str(len(rows)),
-            )
-        )
-
     return ValidationSummary(
-        compared_packets=compared_packets,
+        compared_packets=len(pairs),
         compared_fields=compared_fields,
         mismatches=tuple(mismatches),
+        unmatched_own_packets=unmatched_own,
+        unmatched_tshark_rows=unmatched_tshark,
     )
+
+
+def _pair_packets_with_rows(
+    packets: Sequence[TransportPacket],
+    rows: Sequence[TsharkRow],
+) -> tuple[list[tuple[TransportPacket, TsharkRow]], int, int]:
+    """Empareja paquetes propios con filas de tshark por `frame.number`.
+
+    Emparejar por posicion se rompe si tshark incluye algun frame que el
+    parser propio no soporta (p. ej. IPv6): todo lo que sigue queda
+    desalineado y el "mismatch" se propaga en cascada. El numero de frame es
+    un identificador estable del mismo paquete fisico en el .pcap para ambas
+    herramientas, sin importar que cada una filtre un subconjunto distinto.
+    """
+    has_frame_numbers = bool(packets) and bool(rows) and all(
+        packet.frame_number is not None for packet in packets
+    ) and all(row.frame_number is not None for row in rows)
+
+    if not has_frame_numbers:
+        # Sin numero de frame (p. ej. en pruebas unitarias con datos sintéticos),
+        # se cae de vuelta al emparejado posicional original.
+        size = min(len(packets), len(rows))
+        pairs = list(zip(packets[:size], rows[:size], strict=False))
+        return pairs, len(packets) - size, len(rows) - size
+
+    rows_by_frame = {row.frame_number: row for row in rows}
+    matched_frames: set[int] = set()
+    pairs = []
+    for packet in packets:
+        row = rows_by_frame.get(packet.frame_number)
+        if row is not None:
+            pairs.append((packet, row))
+            matched_frames.add(packet.frame_number)
+
+    unmatched_own = len(packets) - len(pairs)
+    unmatched_tshark = len(rows) - len(matched_frames)
+    return pairs, unmatched_own, unmatched_tshark
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -188,6 +222,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Paquetes comparados: {summary.compared_packets}")
     print(f"Campos comparados  : {summary.compared_fields}")
     print(f"Coincidencia       : {summary.match_ratio:.2%}")
+    if summary.unmatched_own_packets or summary.unmatched_tshark_rows:
+        print(
+            f"Sin pareja         : {summary.unmatched_own_packets} del parser propio, "
+            f"{summary.unmatched_tshark_rows} de tshark (p. ej. IPv6, no soportado)"
+        )
 
     if summary.mismatches:
         print("\nDiferencias:")

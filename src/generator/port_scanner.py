@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import argparse
+import os
+import select
 import socket
 import time
 from collections.abc import Iterable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 
-DEFAULT_SCAN_TIMEOUT = 0.5
+# En esta red controlada, un puerto cerrado en loopback tarda ~2s en devolver el
+# rechazo (el adaptador de loopback de Npcap intercepta el trafico antes de que
+# el sistema genere el RST). Un timeout corto clasificaria todo como "filtered"
+# en vez de "closed". Escanear en paralelo evita pagar ese costo por puerto.
+DEFAULT_SCAN_TIMEOUT = 2.5
+DEFAULT_MAX_WORKERS = 50
 
 
 @dataclass(frozen=True)
@@ -24,44 +32,78 @@ def scan_tcp_ports(
     ports: Iterable[int],
     *,
     timeout: float = DEFAULT_SCAN_TIMEOUT,
+    max_workers: int = DEFAULT_MAX_WORKERS,
 ) -> list[PortScanResult]:
-    """Escaner TCP connect propio para generar trafico de escaneo controlado."""
-    results: list[PortScanResult] = []
+    """Escaner TCP connect propio para generar trafico de escaneo controlado.
 
-    for port in ports:
-        started = time.perf_counter()
-        status = "closed"
-        latency_ms: float | None = None
-        error: str | None = None
+    Escanea en paralelo: el costo de un puerto que no responde se paga una sola
+    vez para todo el lote, no una vez por puerto.
+    """
+    port_list = list(ports)
+    if not port_list:
+        return []
 
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(timeout)
-            try:
-                code = sock.connect_ex((host, port))
-                latency_ms = (time.perf_counter() - started) * 1000
-                status = "open" if code == 0 else "closed"
-                if code not in (0,):
-                    error = _socket_error_name(code)
-            except socket.timeout:
-                latency_ms = (time.perf_counter() - started) * 1000
-                status = "filtered"
-                error = "timeout"
-            except OSError as exc:
-                latency_ms = (time.perf_counter() - started) * 1000
-                status = "error"
-                error = exc.strerror or str(exc)
+    workers = max(1, min(max_workers, len(port_list)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(lambda port: _scan_one_port(host, port, timeout), port_list))
 
-        results.append(
-            PortScanResult(
+
+def _scan_one_port(host: str, port: int, timeout: float) -> PortScanResult:
+    """Conecta sin bloquear y espera con select() en vez de connect_ex() bloqueante.
+
+    En Windows, connect_ex() con socket bloqueante+timeout solo revisa
+    writefds; un puerto cerrado (RST) se reporta en exceptfds y por eso
+    connect_ex() se queda esperando el timeout completo en vez de fallar al
+    instante. Vigilando tambien exceptfds, los puertos cerrados responden en
+    milisegundos como en cualquier otro sistema.
+    """
+    started = time.perf_counter()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setblocking(False)
+
+    try:
+        try:
+            sock.connect((host, port))
+        except BlockingIOError:
+            pass
+        except OSError as exc:
+            return PortScanResult(
                 host=host,
                 port=port,
-                status=status,
-                latency_ms=latency_ms,
-                error=error,
+                status="error",
+                latency_ms=_elapsed_ms(started),
+                error=exc.strerror or str(exc),
             )
-        )
 
-    return results
+        _, writable, exceptional = select.select([], [sock], [sock], timeout)
+
+        if not writable and not exceptional:
+            return PortScanResult(
+                host=host,
+                port=port,
+                status="filtered",
+                latency_ms=_elapsed_ms(started),
+                error="timeout",
+            )
+
+        error_code = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+        latency_ms = _elapsed_ms(started)
+        if error_code == 0:
+            return PortScanResult(host=host, port=port, status="open", latency_ms=latency_ms)
+
+        return PortScanResult(
+            host=host,
+            port=port,
+            status="closed",
+            latency_ms=latency_ms,
+            error=_socket_error_name(error_code),
+        )
+    finally:
+        sock.close()
+
+
+def _elapsed_ms(started: float) -> float:
+    return (time.perf_counter() - started) * 1000
 
 
 def parse_port_range(port_range: str) -> list[int]:
@@ -105,12 +147,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         default=DEFAULT_SCAN_TIMEOUT,
         help="Timeout por puerto en segundos",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_MAX_WORKERS,
+        help="Cantidad de conexiones en paralelo",
+    )
     args = parser.parse_args(argv)
 
     results = scan_tcp_ports(
         args.host,
         parse_port_range(args.ports),
         timeout=args.timeout,
+        max_workers=args.workers,
     )
 
     for result in results:
@@ -130,9 +179,15 @@ def _parse_port(value: str) -> int:
 
 
 def _socket_error_name(code: int) -> str:
+    # En Windows, los codigos de socket son de WinSock (p. ej. 10061), no los
+    # errno de la librería C que entiende os.strerror; socket.errorTab los
+    # traduce correctamente. En POSIX no existe esa tabla y os.strerror basta.
+    error_tab = getattr(socket, "errorTab", None)
+    if error_tab and code in error_tab:
+        return error_tab[code]
     try:
-        return socket.errorTab.get(code, f"errno {code}")  # type: ignore[attr-defined]
-    except AttributeError:
+        return os.strerror(code)
+    except ValueError:
         return f"errno {code}"
 
 

@@ -60,7 +60,11 @@ def detect_port_scans(
     emitted: set[tuple[str, str, str, int]] = set()
 
     ordered_packets = sorted(
-        (packet for packet in packets if packet.protocol in protocols),
+        (
+            packet
+            for packet in packets
+            if packet.protocol in protocols and _is_scan_probe(packet)
+        ),
         key=lambda packet: packet.timestamp if packet.timestamp is not None else 0.0,
     )
 
@@ -198,6 +202,20 @@ def _destination_port(packet: TransportPacket) -> int | None:
     if isinstance(packet.header, TCPHeader | UDPHeader):
         return packet.header.destination_port
     return None
+
+
+def _is_scan_probe(packet: TransportPacket) -> bool:
+    """Distingue intentos de conexion de simples respuestas.
+
+    Un SYN sin ACK es quien inicia la conexion contra un puerto nuevo. Sin este
+    filtro, las respuestas de un servidor (que regresan a los distintos puertos
+    efimeros que usa cada conexion del escaner) tambien acumulan "muchos puertos
+    destino distintos" y el servidor terminaba marcado como si escaneara al
+    atacante.
+    """
+    if packet.protocol == "TCP" and isinstance(packet.header, TCPHeader):
+        return packet.header.flags["SYN"] and not packet.header.flags["ACK"]
+    return packet.protocol == "UDP"
 
 
 def _trim_window(window: deque[TransportPacket], window_seconds: float) -> None:

@@ -1,0 +1,24 @@
+[
+  {
+    "source_ip": "127.0.0.1",
+    "target_ip": "127.0.0.1",
+    "protocol": "TCP",
+    "start_time": 1782002082.324981,
+    "end_time": 1782002082.326601,
+    "distinct_ports": 10,
+    "packet_count": 10,
+    "ports": [
+      6000,
+      6001,
+      6002,
+      6003,
+      6004,
+      6005,
+      6006,
+      6007,
+      6008,
+      6009
+    ],
+    "reason": "10 puertos destino distintos en 5.0 segundos"
+  }
+]

@@ -40,6 +40,7 @@ class TransportPacket:
     protocol: str
     header: TCPHeader | UDPHeader
     payload_length: int
+    frame_number: int | None = None
 
 
 def parse_null_loopback_frame(frame_bytes: bytes) -> IPv4Packet:
@@ -134,12 +135,12 @@ def iter_pcap_transport_headers(
     else:
         _parse_frame = parse_ethernet_ipv4_frame
 
-    for packet_bytes, metadata in reader:
+    for frame_number, (packet_bytes, metadata) in enumerate(reader, start=1):
         timestamp = _metadata_timestamp(metadata)
 
         try:
             ipv4 = _parse_frame(bytes(packet_bytes))
-            transport = _parse_transport_packet(ipv4, timestamp)
+            transport = _parse_transport_packet(ipv4, timestamp, frame_number)
         except ValueError:
             if strict:
                 raise
@@ -152,6 +153,7 @@ def iter_pcap_transport_headers(
 def _parse_transport_packet(
     ipv4: IPv4Packet,
     timestamp: float | None,
+    frame_number: int,
 ) -> TransportPacket | None:
     if ipv4.protocol == PROTO_TCP:
         header = parse_tcp_header(ipv4.payload)
@@ -171,6 +173,7 @@ def _parse_transport_packet(
         protocol=protocol,
         header=header,
         payload_length=payload_length,
+        frame_number=frame_number,
     )
 
 

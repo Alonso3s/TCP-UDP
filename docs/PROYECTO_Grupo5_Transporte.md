@@ -168,7 +168,7 @@ Un componente está listo solo cuando cumple esto:
 - [x] Detector de escaneo (heurísticas + umbrales parametrizables)
 - [x] Cálculo de métricas (precisión, recall, F1, FP/hora, latencia, cobertura)
 - [x] Gráficos de resultados
-- [ ] `.pcap` de muestra definitivos en `captures/`
+- [x] `.pcap` de muestra definitivos en `captures/`
 - [x] Guion de pruebas reproducible en `scripts/`
 - [x] README final con instalación, uso y reproducción
 
