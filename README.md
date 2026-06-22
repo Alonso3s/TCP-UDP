@@ -3,7 +3,7 @@
 Sistema en Python para capturar, parsear y analizar trafico TCP/UDP en una red controlada.
 
 **Curso:** IF5000 - Redes y Comunicacion de Datos, UCR Sede del Sur  
-**Integrantes:** Darnell Alonso Estrada Quesada, Rick Daniel Rodriguez  
+**Integrantes:** Darnell Alonso Estrada Quesada, Rick Daniel Rodriguez, Jorge Murillo  
 **Demo E3:** 23 de junio de 2026
 
 ## Estado actual
@@ -97,13 +97,20 @@ parser propio contra una herramienta de referencia (Wireshark/tshark).
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip --version                    //para verificar que esté activado correctamente
 pip install -r requirements.txt
 ```
 
 > Windows: se requiere [Npcap](https://npcap.com/) con modo WinPcap habilitado para que Scapy
-> pueda capturar paquetes. Ejecutar el sniffer (y `scripts/demo.py`) como administrador.
+> pueda capturar paquetes.
+> Ejecutar el sniffer (y `scripts/demo.py`) como administrador.
+> Para verificar si esta instalado: `Get-Service npcap` en PowerShell (si da error, no lo tiene instalado).
 > Para la validacion contra tshark se requiere Wireshark instalado; si `tshark` no esta en el
 > `PATH`, usar la ruta completa: `C:\Program Files\Wireshark\tshark.exe`.
+
+> Nota: la terminal de admin es independiente, o sea, si activaste `.venv` en una terminal normal,
+> hay que volver a activarlo dentro de otra terminal abierta como administrador. 
+> Se recomienda iniciar VS Code como administrador, así hereda los permisos.
 
 ## Pruebas
 
@@ -152,7 +159,7 @@ administrador**.
 
 **Terminal 1 - sniffer** (iniciarlo antes que los demas procesos):
 
-```powershell
+```cmd
 python -m src.capture.sniffer captures\sesion_tcp_udp.pcap ^
     --iface "\Device\NPF_Loopback" --count 500 --timeout 12 ^
     --filter "(tcp or udp) and host 127.0.0.1"
@@ -199,9 +206,13 @@ for flow in reconstruct_tcp_flows(packets).values():
 
 ### 4. Validar el parser propio contra tshark
 
-```powershell
+```cmd
 python -m src.validation.tshark_compare captures\sesion_tcp_udp.pcap ^
     --tshark "C:\Program Files\Wireshark\tshark.exe"
+```
+
+```powershell
+python -m src.validation.tshark_compare captures\sesion_tcp_udp.pcap --tshark "C:\Program Files\Wireshark\tshark.exe"
 ```
 
 Compara campo a campo: IP origen/destino, protocolo, puertos, secuencia, ACK, longitud de
@@ -213,7 +224,7 @@ cabecera, flags, ventana, longitud UDP y checksums.
 
 ```powershell
 python -m src.capture.sniffer captures\escaneo_tcp_connect.pcap ^
-    --iface "\Device\NPF_Loopback" --count 500 --timeout 10 ^
+    --iface "\Device\NPF_Loopback" --count 500 --timeout 10 ^              
     --filter "(tcp or udp) and host 127.0.0.1"
 ```
 

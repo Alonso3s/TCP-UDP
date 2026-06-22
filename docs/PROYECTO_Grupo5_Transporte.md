@@ -11,7 +11,9 @@
 - **Entrega de la demo (E3):** martes 23 de junio
 - **Integrantes:** Darnell Alonso Estrada Quesada
                    Rick Daniel Rodriguez  
-- **Repositorio:** [URL del repo Git público]
+                   Jorge Murillo Valverde
+
+- **Repositorio:** https://github.com/Alonso3s/TCP-UDP.git
 
 ---
 
